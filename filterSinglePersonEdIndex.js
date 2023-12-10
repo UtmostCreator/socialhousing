@@ -11,6 +11,21 @@ const notTheBestLevelArr = ['Basement', 'Ground'];
 const notSuitableArr = ['Mover'];
 const removeWhenArr = ['Aged 60 and over', 'Sheltered'];
 const warningArr = ['Fourth', 'Multi storey flat'];
+
+function addCopyListener(el) {
+    el.onclick = function() {
+        document.execCommand("copy");
+    }
+
+    el.addEventListener("copy", function(event) {
+        event.preventDefault();
+        if (event.clipboardData) {
+            event.clipboardData.setData("text/plain", el.textContent);
+            console.log(event.clipboardData.getData("text"))
+        }
+    });
+}
+
 $(document).ready(function () {
 
     function doubleCheckChanges() {
@@ -55,6 +70,29 @@ $(document).ready(function () {
                     removeThis = true;
                     return;
                 }
+
+                if (text.includes(',')) {
+                    $(this).text('');
+                    const addr = text.split(',');
+                    const postCode = addr.pop();
+                    const streetAddressEl = document.createElement('span');
+                    streetAddressEl.innerHTML = addr.join(', ');
+                    streetAddressEl.style.fontSize = '12px';
+                    streetAddressEl.style.background = 'black';
+                    streetAddressEl.style.color = 'white';
+                    streetAddressEl.style.padding = '2px';
+                    $(this).append(streetAddressEl);
+                    addCopyListener(streetAddressEl);
+
+                    const postCodeEl = document.createElement('span');
+                    postCodeEl.innerHTML = postCode;
+                    postCodeEl.style.fontSize = '20px';
+                    postCodeEl.style.background = 'grey';
+                    postCodeEl.style.padding = '5px';
+                    $(this).append(postCodeEl);
+                    addCopyListener(postCodeEl);
+                }
+
                 if (text === 'House') {
                     $(this).text($(this).text() + '🏡');
                     $(this).css('font-size', '18px');

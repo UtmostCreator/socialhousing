@@ -1,4 +1,10 @@
 function waitForElm(selector) {
+    let interval = setInterval(function() {
+        if ($('.u-Processing-spinner').length) {
+            interval(waitForElm(selector))
+            return;
+        }
+    },150)
     return new Promise(resolve => {
         if (document.querySelector(selector)) {
             return resolve(document.querySelector(selector));

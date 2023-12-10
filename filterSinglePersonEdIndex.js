@@ -16,6 +16,9 @@ function addCopyListener(el) {
     el.onclick = function() {
         document.execCommand("copy");
     }
+    el.touchend = function() {
+        document.execCommand("copy");
+    }
 
     el.addEventListener("copy", function(event) {
         event.preventDefault();

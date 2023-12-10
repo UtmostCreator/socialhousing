@@ -88,7 +88,7 @@ $(document).ready(function () {
                 if (text.includes(',')) {
                     $(this).text('');
                     const addr = text.split(',');
-                    const postCode = addr.pop();
+                    const postCode = addr.pop().trim();
                     const streetAddressEl = document.createElement('span');
                     streetAddressEl.innerHTML = addr.join(', ');
                     streetAddressEl.style.fontSize = '12px';

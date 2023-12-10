@@ -90,7 +90,7 @@ $(document).ready(function () {
                     const addr = text.split(',');
                     const postCode = addr.pop().trim();
                     const streetAddressEl = document.createElement('span');
-                    streetAddressEl.innerHTML = addr.join(', ');
+                    streetAddressEl.innerHTML = addr.join(',');
                     streetAddressEl.style.fontSize = '12px';
                     streetAddressEl.style.background = 'black';
                     streetAddressEl.style.color = 'white';

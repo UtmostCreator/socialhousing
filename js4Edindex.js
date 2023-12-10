@@ -2,22 +2,15 @@ const worstLocations = ['Lochend', 'Inch', 'West Pilton', 'Granton', 'Muirhouse'
     'Prestonfield', 'Craigmillar', 'Niddrie', 'Moredun', 'Gilmerton', 'Gracemount',
     'Bingham, Magdalene and The Christians', 'Stenhouse', 'Saughton', 'Broomhouse', 'Wester Hails', 'Inch'
 ];
-
-
 const valueClass = '.field-value-min';
 const propertyItemClass = '.table-row-min';
-
-
 const moreChancesArr = ['Starter'];
 const roomTypeFilterArr = ["One", "Studio"];
 const propertyFilteredTypesArr = ["Starter", "Either Starter or Mover"];
-
-
 const notTheBestLevelArr = ['Basement', 'Ground'];
 const notSuitableArr = ['Mover'];
 const removeWhenArr = ['Aged 60 and over', 'Sheltered'];
 const warningArr = ['Fourth', 'Multi storey flat'];
-
 $(document).ready(function () {
     function runCheck() {
         if ($('#body-primary-region .table-row-min')) {
@@ -49,16 +42,13 @@ $(document).ready(function () {
                     removeThis = true;
                     return;
                 }
-
                 if (text === 'House') {
                     $(this).text($(this).text() + '🏡');
                     $(this).css('font-size', '18px');
                 }
-
                 if (worstLocations.includes(text)) {
                     worstPlace = true;
                 }
-
                 if (propertyFilteredTypesArr.includes(text)) {
                     propTypeOk = true;
                 }
@@ -112,32 +102,20 @@ $(document).ready(function () {
                 $(this).css('opacity', '.5');
             }
         });
-
         $('html, body').animate({
             scrollTop: 0
-        }, 'slow');
+        }, 'fast');
     }
-
-
-
     function doubleCheckChanges() {
         var tableContainer = $('.table-container');
-
-
         if (!tableContainer.hasClass('your-class-name')) {
-
             tableContainer.addClass('your-class-name');
             console.log('Class added to .table-container');
             runCheck();
         }
-
-
         setTimeout(doubleCheckChanges, 100);
     }
-
-
     doubleCheckChanges();
-
     $('#body-primary-region').on('click', 'td.pagination div.pagination a', function () {
         $('.table-container').innerHTML = '';
         runCheck();

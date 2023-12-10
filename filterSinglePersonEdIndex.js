@@ -1,3 +1,4 @@
+
 const worstLocations = ['Lochend', 'Inch', 'West Pilton', 'Granton', 'Muirhouse', 'Clermiston/Parkgrove', 'Greendykes', 'Royston Mains', 'Southhouse/Burdiehous', 'Restalrig', 'Milton', 'Dumbryden', 'Calders', 'Hyvots', 'Hailesland', 'Murrayburn', 'Saughton Mains',
     'Prestonfield', 'Craigmillar', 'Niddrie', 'Moredun', 'Gilmerton', 'Gracemount',
     'Bingham, Magdalene and The Christians', 'Stenhouse', 'Saughton', 'Broomhouse', 'Wester Hails', 'Inch'
@@ -13,14 +14,13 @@ const removeWhenArr = ['Aged 60 and over', 'Sheltered'];
 const warningArr = ['Fourth', 'Multi storey flat'];
 
 function addCopyListener(el) {
-    el.onclick = function() {
+    const copyText = function () {
         document.execCommand("copy");
     }
-    el.touchend = function() {
-        document.execCommand("copy");
-    }
+    el.onclick = copyText;
+    el.addEventListener('touchend', copyText);
 
-    el.addEventListener("copy", function(event) {
+    el.addEventListener("copy", function (event) {
         event.preventDefault();
         if (event.clipboardData) {
             event.clipboardData.setData("text/plain", el.textContent);
@@ -43,6 +43,7 @@ $(document).ready(function () {
         }
         setTimeout(doubleCheckChanges, 100);
     }
+
     function runCheck() {
         if ($('#body-primary-region .table-row-min')) {
             $('html, body').animate({
@@ -60,6 +61,16 @@ $(document).ready(function () {
             let notTheBestLevel = false;
             let warning = false;
             let roomStudio = false;
+
+            $(this).find('.column-min').each(function () {
+                console.log($(this).attr('data-label') && $(this).attr('data-label').trim());
+                if ($(this).attr('data-label') && $(this).attr('data-label').trim() === 'No. of Bedrooms') {
+                    $(this).css('z-index', -444);
+                    console.log('found');
+                    return false; // Exit the loop early if found
+                }
+            });
+
             $(this).find(valueClass).each(function () {
                 let text = $(this).text().trim();
                 if (roomTypeFilterArr.includes(text)) {
@@ -158,6 +169,7 @@ $(document).ready(function () {
             scrollTop: 0
         }, 'fast');
     }
+
     doubleCheckChanges();
     $('#body-primary-region').on('click', 'td.pagination div.pagination a', function () {
         $('.table-container').innerHTML = '';

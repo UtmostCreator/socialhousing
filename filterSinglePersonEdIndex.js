@@ -100,16 +100,14 @@ $(document).ready(function () {
                 $(this).parent().prepend($(this));
             } else if (roomTypeOk && propTypeOk) {
                 if (worstPlace) {
-                    $(this).css('background-color', 'grey');
+                    $(this).css('background-color', 'indianred');
+                    $(this).css('opacity', '.5');
                     $(this).parent().append($(this))
                 } else if (warning) {
                     $(this).css('background-color', 'burlywood');
                 } else {
                     $(this).css('background-color', 'yellowgreen');
                 }
-            } else if (worstPlace) {
-                $(this).css('background-color', 'red');
-                $(this).css('opacity', '.5');
             } else if (notSuitable) {
                 $(this).css('background-color', 'yellow');
                 $(this).css('opacity', '.5');

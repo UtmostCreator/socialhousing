@@ -12,6 +12,19 @@ const notSuitableArr = ['Mover'];
 const removeWhenArr = ['Aged 60 and over', 'Sheltered'];
 const warningArr = ['Fourth', 'Multi storey flat'];
 $(document).ready(function () {
+
+    function doubleCheckChanges() {
+        let tableContainer = $('.table-container');
+        if (tableContainer.length) {
+            return;
+        }
+        if (!tableContainer.hasClass('your-class-name')) {
+            tableContainer.addClass('your-class-name');
+            console.log('Class added to .table-container');
+            runCheck();
+        }
+        setTimeout(doubleCheckChanges, 100);
+    }
     function runCheck() {
         if ($('#body-primary-region .table-row-min')) {
             $('html, body').animate({
@@ -105,15 +118,6 @@ $(document).ready(function () {
         $('html, body').animate({
             scrollTop: 0
         }, 'fast');
-    }
-    function doubleCheckChanges() {
-        var tableContainer = $('.table-container');
-        if (!tableContainer.hasClass('your-class-name')) {
-            tableContainer.addClass('your-class-name');
-            console.log('Class added to .table-container');
-            runCheck();
-        }
-        setTimeout(doubleCheckChanges, 100);
     }
     doubleCheckChanges();
     $('#body-primary-region').on('click', 'td.pagination div.pagination a', function () {

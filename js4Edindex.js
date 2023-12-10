@@ -15,7 +15,7 @@ $(document).ready(function () {
 
     function doubleCheckChanges() {
         let tableContainer = $('.table-container');
-        if (tableContainer.length) {
+        if (!tableContainer.length) {
             return;
         }
         if (!tableContainer.hasClass('your-class-name')) {

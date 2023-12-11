@@ -31,6 +31,7 @@ $(document).ready(function () {
                 scrollTop: 0
             }, 'slow');
         }
+        let removeOnThisPage = $('.page-header').length && ['Basket', 'Bid Registration'].includes($('.page-header').text());
         $(propertyItemClass).each(function () {
             const that = $(this);
             let roomTypeOk = false;
@@ -75,7 +76,7 @@ $(document).ready(function () {
                     $(this).css('color', 'red');
                 }
             });
-            if (!roomTypeOk || removeThis) {
+            if ((!roomTypeOk || removeThis) && !removeOnThisPage) {
                 $(this).remove();
             }
             if (notTheBestLevel || warning) {

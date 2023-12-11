@@ -50,6 +50,7 @@ $(document).ready(function () {
                 scrollTop: 0
             }, 'slow');
         }
+        let isBasketPage = $('.page-header').length && $('.page-header').text() === 'Basket';
         $(propertyItemClass).each(function () {
             const that = $(this);
             let roomTypeOk = false;
@@ -80,7 +81,7 @@ $(document).ready(function () {
                         $(this).css('color', 'yellow');
                     }
                 }
-                if (removeWhenArr.includes(text) && $('.page-header').text() !== 'Basket') {
+                if (removeWhenArr.includes(text)) {
                     removeThis = true;
                     return;
                 }
@@ -132,7 +133,7 @@ $(document).ready(function () {
                     $(this).css('color', 'red');
                 }
             });
-            if (!roomTypeOk || removeThis) {
+            if ((!roomTypeOk || removeThis) && !isBasketPage) {
                 $(this).remove();
             }
             if (notTheBestLevel || warning) {

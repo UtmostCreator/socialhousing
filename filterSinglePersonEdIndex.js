@@ -80,7 +80,7 @@ $(document).ready(function () {
                         $(this).css('color', 'yellow');
                     }
                 }
-                if (removeWhenArr.includes(text)) {
+                if (removeWhenArr.includes(text) && $('.page-header').text() !== 'Basket') {
                     removeThis = true;
                     return;
                 }

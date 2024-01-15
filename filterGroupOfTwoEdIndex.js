@@ -92,7 +92,7 @@ $(document).ready(function () {
                     "border-style": "solid"
                 });
             }
-            if (moreChances && !worstPlace) {
+            if (moreChances && !worstPlace && !quiteBadPlace) {
                 $(this).css('background-color', 'green');
                 $(this).css({
                     "border-color": "blue",

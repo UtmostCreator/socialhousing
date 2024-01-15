@@ -1,7 +1,9 @@
 const worstLocations = ['Lochend', 'Inch', 'West Pilton', 'Granton', 'Muirhouse', 'Clermiston/Parkgrove', 'Greendykes', 'Royston Mains', 'Southhouse/Burdiehous', 'Restalrig', 'Milton', 'Dumbryden', 'Calders', 'Hyvots', 'Hailesland', 'Murrayburn', 'Saughton Mains',
     'Prestonfield', 'Craigmillar', 'Niddrie', 'Moredun', 'Gilmerton', 'Gracemount',
-    'Bingham, Magdalene and The Christians', 'Stenhouse', 'Saughton', 'Broomhouse', 'Wester Hails', 'Inch'
+    'Bingham, Magdalene and The Christians', 'Stenhouse', 'Saughton', 'Broomhouse', 'Wester Hails', 'Inch', 'Westburn'
 ];
+const quiteBadLocations = ['Leith'];
+
 const valueClass = '.field-value-min';
 const propertyItemClass = '.table-row-min';
 const moreChancesArr = ['Starter'];
@@ -37,6 +39,7 @@ $(document).ready(function () {
             let roomTypeOk = false;
             let propTypeOk = false;
             let worstPlace = false;
+            let quiteBadPlace = false;
             let notSuitable = false;
             let removeThis = false;
             let moreChances = false;
@@ -57,6 +60,9 @@ $(document).ready(function () {
                 }
                 if (worstLocations.includes(text)) {
                     worstPlace = true;
+                }
+                if (quiteBadLocations.includes(text)) {
+                    quiteBadPlace = true;
                 }
                 if (propertyFilteredTypesArr.includes(text)) {
                     propTypeOk = true;
@@ -99,7 +105,9 @@ $(document).ready(function () {
                     $(this).css('background-color', 'indianred');
                     $(this).css('opacity', '.5');
                     $(this).parent().append($(this))
-                } else if (warning) {
+                } else if (quiteBadPlace) {
+                    $(this).css('background-color', 'orange');
+                }  else if (warning) {
                     $(this).css('background-color', 'burlywood');
                 } else {
                     $(this).css('background-color', 'yellowgreen');

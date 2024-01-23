@@ -1,7 +1,7 @@
 
 const worstLocations = ['Lochend', 'Inch', 'West Pilton', 'Granton', 'Muirhouse', 'Clermiston/Parkgrove', 'Greendykes', 'Royston Mains', 'Southhouse/Burdiehous', 'Restalrig', 'Milton', 'Dumbryden', 'Calders', 'Hyvots', 'Hailesland', 'Murrayburn', 'Saughton Mains',
     'Prestonfield', 'Craigmillar', 'Niddrie', 'Moredun', 'Gilmerton', 'Gracemount',
-    'Bingham, Magdalene and The Christians', 'Stenhouse', 'Saughton', 'Broomhouse', 'Wester Hails', 'Inch', 'Westburn'
+    'Bingham, Magdalene and The Christians', 'Stenhouse', 'Saughton', 'Broomhouse', 'Wester Hails', 'Wester Hailes', 'Inch', 'Westburn'
 ];
 const quiteBadLocations = ['Leith'];
 

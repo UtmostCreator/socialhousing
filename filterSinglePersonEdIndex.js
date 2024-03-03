@@ -12,7 +12,7 @@ const roomTypeFilterArr = ["One", "Studio"];
 const propertyFilteredTypesArr = ["Starter", "Either Starter or Mover"];
 const notTheBestLevelArr = ['Basement', 'Ground'];
 const notSuitableArr = ['Mover'];
-const removeWhenArr = ['Aged 60 and over', 'Sheltered', 'Aged 50 and over'];
+const removeWhenArr = ['Aged 60 and over', 'Sheltered', 'Aged 50 and over', 'Preferably aged 60 and over','Preferably aged 50 and over', 'Dispersed alarm'];
 const warningArr = ['Fourth', 'Multi storey flat'];
 
 function addCopyListener(el) {

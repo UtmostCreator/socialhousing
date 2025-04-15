@@ -6,12 +6,13 @@ const quiteBadLocations = ['Leith'];
 
 const valueClass = '.field-value-min';
 const propertyItemClass = '.table-row-min';
-const moreChancesArr = ['Starter'];
+const moreChancesArr = ['Mover'];
 const roomTypeFilterArr = ["Two"];
-const propertyFilteredTypesArr = ["Starter", "Either Starter or Mover"];
+const propertyFilteredTypesArr = ["Mover", "Either Starter or Mover"];
 const notTheBestLevelArr = ['Basement', 'Ground'];
-const notSuitableArr = ['Mover'];
+const notSuitableArr = ['Starter'];
 const removeWhenArr = ['Aged 60 and over', 'Sheltered', 'Aged 50 and over', 'Preferably aged 60 and over','Preferably aged 50 and over', 'Dispersed alarm'];
+// const removeWhenArr = ['Aged 60 and over', 'Sheltered', 'Aged 50 and over', 'Preferably aged 60 and over','Preferably aged 50 and over', 'Dispersed alarm'];
 const warningArr = ['Fourth', 'Multi storey flat'];
 $(document).ready(function () {
 
@@ -51,8 +52,7 @@ $(document).ready(function () {
                     roomTypeOk = true;
                 }
                 if (removeWhenArr.includes(text)) {
-                    removeThis = true;
-                    return;
+                    $(this).text('👴' + $(this).text());
                 }
                 if (text === 'House') {
                     $(this).text($(this).text() + '🏡');

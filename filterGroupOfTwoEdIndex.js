@@ -1,4 +1,3 @@
-```javascript
 // === Enhancer v2.9 — spinner-gated, persistent ON/OFF, auto-reload on toggle, "Not detected" status, debug logs ===
 const ENHANCER_VERSION = '2.9';
 const DEBUG = true;
@@ -275,4 +274,3 @@ $(function(){
     log('Enhancer disabled via storage; idle.');
   }
 });
-```

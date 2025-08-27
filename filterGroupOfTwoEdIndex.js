@@ -1,7 +1,8 @@
-// === Enhancer v2.4 — spinner-gated, persistent, self-verifying ===
-const ENHANCER_VERSION = '2.4';
+// === Enhancer v2.6 — spinner-gated, persistent, with colored summary ===
+const ENHANCER_VERSION = '2.6';
 const valueClass = '.field-value-min';
 const propertyItemClass = '.table-row-min';
+const SPINNER_SEL = 'span.u-Processing[role="alert"]';
 
 const worstLocations = [...new Set(['Lochend','Inch','West Pilton','Granton','Muirhouse','Clermiston/Parkgrove','Greendykes','Royston Mains','Southhouse/Burdiehous','Restalrig','Milton','Dumbryden','Calders','Hyvots','Hailesland','Murrayburn','Saughton Mains','Prestonfield','Craigmillar','Niddrie','Moredun','Gilmerton','Gracemount','Bingham, Magdalene and The Christians','Stenhouse','Saughton','Broomhouse','Wester Hails','Wester Hailes','Westburn'])];
 const quiteBadLocations = ['Leith'];
@@ -10,7 +11,6 @@ const propertyFilteredTypesArr = ['Mover','Either Starter or Mover']; // green h
 const removeWhenArr = ['Aged 60 and over','Sheltered','Aged 50 and over','Preferably aged 60 and over','Preferably aged 50 and over','Dispersed alarm'];
 const warningArr = ['Fourth','Multi storey flat'];
 const notTheBestLevelArr = ['Basement','Ground'];
-const SPINNER_SEL = 'span.u-Processing[role="alert"]';
 
 // --- Styles ---
 (function injectStyles(){
@@ -22,6 +22,7 @@ const SPINNER_SEL = 'span.u-Processing[role="alert"]';
     .row--warn{border:3px solid #f7d674}
     .row--red-border{border:3px solid #e74c3c}
     .row--hidden{display:none !important}
+
     .enhancer-toggle{margin-left:.5rem;font:600 12px/1.2 system-ui,Segoe UI,Roboto,Arial;padding:.35rem .6rem;border-radius:6px;border:1px solid #bbb;background:#f5f5f5;cursor:pointer}
     .enhancer-toggle[aria-pressed="true"]{background:#e9fbe7;border-color:#7ec87a}
     .enhancer-toggle[aria-pressed="false"]{background:#f7e9e9;border-color:#e07979}
@@ -29,6 +30,15 @@ const SPINNER_SEL = 'span.u-Processing[role="alert"]';
     .enhancer-status--ok{border-color:#7ec87a}
     .enhancer-status--busy{border-color:#f4b942}
     .enhancer-status--off{border-color:#aaa;color:#777}
+
+    #enhancer-summary{margin:.6rem 0 0 0;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+    #enhancer-summary .chip{display:inline-flex;align-items:center;gap:.4rem;padding:.2rem .5rem;border-radius:999px;border:1px solid #ccc;font:600 12px/1 system-ui,Segoe UI,Roboto,Arial;background:#fff}
+    .chip .dot{width:.75rem;height:.75rem;border-radius:50%}
+    .dot--green{background:#c8f7c5}
+    .dot--red{background:#f5b7b1;border:1px solid #e74c3c}
+    .dot--orange{background:#ffd59f}
+    .dot--warn{background:#fff;border:2px solid #f7d674;border-radius:50%}
+    .dot--hidden{background:#eee}
   `;
   if(!document.getElementById('row-style-injected')){
     const s=document.createElement('style'); s.id='row-style-injected'; s.textContent=css; document.head.appendChild(s);
@@ -40,31 +50,34 @@ $(function(){
   let moRows = null;
   let moSpinner = null;
 
-  let lastMutationAt = 0;
   let lastSignature = '';
-  let spinnerEverSeen = false;       // must see spinner before first apply
-  let spinnerCurrentlyVisible = false;
+  let spinnerEverSeen = false;
+  let spinnerVisible = false;
   let pendingApply = false;
 
-  const MUST_SEE_SPINNER_FIRST = true; // requirement
+  const MUST_SEE_SPINNER_FIRST = true;
+  const STABLE_WINDOW_MS = 600;
 
-  // --- UI: toggle + status ---
+  // --- UI: toggle + status + summary ---
   function ensureHeaderControls(){
     const $h = $('h1.page-header');
     if(!$h.length) return;
     if(!$('#enhancer-toggle').length){
-      $('<button id="enhancer-toggle" type="button" class="enhancer-toggle" aria-pressed="true" title="Enable/disable row enhancer">Enhancer: ON</button>')
+      $('<button id="enhancer-toggle" type="button" class="enhancer-toggle" aria-pressed="true" title="Enable/disable enhancer">Enhancer: ON</button>')
         .appendTo($h)
         .on('click', () => {
           enhancerEnabled = !enhancerEnabled;
           $('#enhancer-toggle').attr('aria-pressed', String(enhancerEnabled)).text(`Enhancer: ${enhancerEnabled ? 'ON' : 'OFF'}`);
           updateStatus(enhancerEnabled ? 'busy' : 'off', '—');
           if (enhancerEnabled){ attachObservers(); gatedApply(true); }
-          else { detachObservers(); clearStyles(true); }
+          else { detachObservers(); clearStyles(true); renderSummary({}); }
         });
     }
     if(!$('#enhancer-status').length){
       $('<span id="enhancer-status" class="enhancer-status enhancer-status--busy" title="Enhancer status">↻ Waiting…</span>').appendTo($h);
+    }
+    if(!$('#enhancer-summary').length){
+      $('<div id="enhancer-summary" aria-live="polite"></div>').insertAfter($h);
     }
   }
   function updateStatus(state, note){
@@ -74,6 +87,20 @@ $(function(){
     if(state==='ok'){ $s.addClass('enhancer-status--ok').text(`✓ Stabilized ${note||''}`); }
     else if(state==='busy'){ $s.addClass('enhancer-status--busy').text(`↻ Updating… ${note||''}`); }
     else { $s.addClass('enhancer-status--off').text(`⏻ Off ${note||''}`); }
+  }
+  function renderSummary(stats){
+    const $c = $('#enhancer-summary');
+    if(!$c.length) return;
+    const {total=0, green=0, worst=0, bad=0, warned=0, hidden=0} = stats || {};
+    const html = `
+      <span class="chip"><span class="dot dot--green"></span>Green (Mover/Either): ${green}</span>
+      <span class="chip"><span class="dot dot--red"></span>Worst loc (red border if green): ${worst}</span>
+      <span class="chip"><span class="dot dot--orange"></span>Quite bad loc: ${bad}</span>
+      <span class="chip"><span class="dot dot--warn"></span>Warnings (level/storey): ${warned}</span>
+      <span class="chip"><span class="dot dot--hidden"></span>Hidden/Removed: ${hidden}</span>
+      <span class="chip">Total rows: ${total}</span>
+    `;
+    $c.html(html);
   }
 
   // --- Helpers ---
@@ -86,14 +113,15 @@ $(function(){
     });
     return hash(chunks.join('|'));
   };
-  const isSpinnerVisible = () => $(SPINNER_SEL).length > 0;
+  const isSpinnerNow = () => $(SPINNER_SEL).length > 0;
 
   function clearStyles(showHidden){
     const $rows = $(propertyItemClass);
     $rows.removeClass('row--green row--bad row--worst row--warn row--red-border row--hidden')
-         .removeAttr('data-enhanced');
+         .removeAttr('data-enhanced')
+         .css({backgroundColor:'', border:'', opacity:''})
+         .find(valueClass).css({color:''});
     if (showHidden) $rows.removeClass('row--hidden');
-    $rows.css({backgroundColor:'', border:'', opacity:''}).find(valueClass).css({color:''});
   }
 
   // --- Core classify/apply ---
@@ -101,13 +129,13 @@ $(function(){
     const texts = $row.find(valueClass).map(function(){ return $(this).text().trim(); }).get();
 
     const roomTypeOk       = texts.some(t => roomTypeFilterArr.includes(t));
-    const hasPropFiltered  = texts.some(t => propertyFilteredTypesArr.includes(t));
+    const hasPropFiltered  = texts.some(t => propertyFilteredTypesArr.includes(t));  // green
     const isWorstPlace     = texts.some(t => worstLocations.includes(t));
     const isQuiteBadPlace  = texts.some(t => quiteBadLocations.includes(t));
     const levelWarn        = texts.some(t => notTheBestLevelArr.includes(t));
     const otherWarnings    = texts.some(t => warningArr.includes(t));
 
-    const isStarterOnly    = texts.includes('Starter') && !texts.includes('Either Starter or Mover');
+    const isStarterOnly    = texts.includes('Starter') && !texts.includes('Either Starter or Mover'); // strict
     const hasRemoveFlag    = texts.some(t => removeWhenArr.includes(t));
     const removeThis       = isStarterOnly || hasRemoveFlag;
 
@@ -142,16 +170,28 @@ $(function(){
     if(!enhancerEnabled) return;
 
     const $rows = $(propertyItemClass);
-    if (!$rows.length) return;
+    if (!$rows.length) { renderSummary({total:0,green:0,worst:0,bad:0,warned:0,hidden:0}); return; }
 
     const removeOnThisPage = $('.page-header').length && ['Basket','Bid Registration'].includes($('.page-header').text().trim());
-    if (removeOnThisPage){ clearStyles(true); updateStatus('ok', '(skipped on this page)'); return; }
+    if (removeOnThisPage){ clearStyles(true); updateStatus('ok', '(skipped on this page)'); renderSummary({}); return; }
+
+    let total=0, hidden=0, green=0, worst=0, bad=0, warned=0;
 
     $rows.each(function(){
       const $row = $(this);
       const cls = classifyRow($row);
       applyStyles($row, cls);
+
+      total++;
+      if (cls.removeThis || !cls.roomTypeOk) hidden++;
+      if (cls.hasPropFiltered) green++;
+      if (cls.isWorstPlace && !cls.hasPropFiltered) worst++;
+      if (cls.isQuiteBadPlace && !cls.hasPropFiltered) bad++;
+      if (cls.levelWarn || cls.otherWarnings) warned++;
     });
+
+    // update colored summary immediately after styling
+    renderSummary({total, hidden, green, worst, bad, warned});
 
     const sig = rowsSignature();
     if (force || sig !== lastSignature){
@@ -160,35 +200,28 @@ $(function(){
     }
   }
 
-  // --- Spinner-gated apply ---
-  const STABLE_WINDOW_MS = 600;
-  const debouncedRun = debounce(()=>{ runCheck(); }, 120);
-
+  // --- Spinner-gated orchestrator ---
   function gatedApply(force=false){
     if(!enhancerEnabled) return;
 
-    spinnerCurrentlyVisible = isSpinnerVisible();
-    if (spinnerCurrentlyVisible){
+    spinnerVisible = isSpinnerNow();
+    if (spinnerVisible){
       pendingApply = true;
       updateStatus('busy', '(processing…)');
-      return; // wait until spinner disappears
+      return;
     }
-
     if (MUST_SEE_SPINNER_FIRST && !spinnerEverSeen){
-      // Do not apply until spinner has appeared at least once
       updateStatus('busy', '(waiting for first spinner…)');
       return;
     }
-
-    // No spinner visible and requirement satisfied -> apply after short stability window
     updateStatus('busy', '(applying…)');
-    setTimeout(()=>{ runCheck(force); }, STABLE_WINDOW_MS);
+    setTimeout(()=> runCheck(force), STABLE_WINDOW_MS);
   }
 
-  // --- Verify persistence ---
+  // --- Persistence verifier ---
   function verifyNow(){
     if(!enhancerEnabled) return;
-    if (isSpinnerVisible()){ updateStatus('busy', '(processing…)'); return; }
+    if (isSpinnerNow()){ updateStatus('busy', '(processing…)'); return; }
 
     const $rows = $(propertyItemClass);
     let ok=0, expect=0;
@@ -209,11 +242,12 @@ $(function(){
       updateStatus('ok', `(v${ENHANCER_VERSION} • ${pct}% verified)`);
     } else {
       updateStatus('busy', `(reapplying; ${pct}% ok)`);
-      debouncedRun();
+      runCheck();
       scheduleVerify();
     }
   }
   const scheduleVerify = debounce(()=>verifyNow(), STABLE_WINDOW_MS);
+  const debouncedGatedApply = debounce(()=>gatedApply(), 120);
 
   // --- Observers ---
   function detachObservers(){
@@ -221,35 +255,31 @@ $(function(){
     if(moSpinner){ moSpinner.disconnect(); moSpinner=null; }
   }
   function attachObservers(){
-    // Rows/container observer
     const container = document.querySelector('.table-container') || document.body;
     if (moRows) moRows.disconnect();
     moRows = new MutationObserver((mutations) => {
-      lastMutationAt = Date.now();
-      // only react to real content changes
       const relevant = mutations.some(m => m.type==='childList' || m.type==='characterData');
-      if (relevant) gatedApply();
+      if (relevant) debouncedGatedApply();
     });
     moRows.observe(container, {childList:true,subtree:true,characterData:true});
 
-    // Spinner observer (must appear first; apply only after it disappears)
     if (moSpinner) moSpinner.disconnect();
     moSpinner = new MutationObserver(() => {
-      const visible = isSpinnerVisible();
+      const visible = isSpinnerNow();
       if (visible){
-        spinnerCurrentlyVisible = true;
+        spinnerVisible = true;
         spinnerEverSeen = true;
         updateStatus('busy', '(processing…)');
       } else {
-        // spinner disappeared: if we were waiting, apply now
-        spinnerCurrentlyVisible = false;
+        // SPINNER REMOVED/HIDDEN: attach updated content NOW
+        spinnerVisible = false;
         if (pendingApply || spinnerEverSeen){
           pendingApply = false;
-          gatedApply(true);
+          gatedApply(true);       // apply styles + render colored list after spinner hides
         }
       }
     });
-    moSpinner.observe(document.body, {childList:true,subtree:true});
+    moSpinner.observe(document.body, {childList:true,subtree:true,attributes:true,attributeFilter:['style','class']});
   }
 
   // --- Init ---
@@ -257,10 +287,10 @@ $(function(){
   attachObservers();
   updateStatus('busy', `(v${ENHANCER_VERSION})`);
 
-  // Initial gate: do nothing until spinner appears and disappears
+  // Do not run until spinner appears and disappears at least once
   if (!MUST_SEE_SPINNER_FIRST) gatedApply(true);
 
-  // Pagination hooks
+  // Pagination hook
   $('#body-primary-region').on('click', 'td.pagination div.pagination a', function () {
     if (enhancerEnabled){ updateStatus('busy'); gatedApply(); }
   });

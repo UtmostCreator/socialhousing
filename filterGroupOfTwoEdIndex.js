@@ -1,4 +1,3 @@
-```javascript
 // === Enhancer v2.4 — spinner-gated, persistent, self-verifying ===
 const ENHANCER_VERSION = '2.4';
 const valueClass = '.field-value-min';
@@ -266,4 +265,3 @@ $(function(){
     if (enhancerEnabled){ updateStatus('busy'); gatedApply(); }
   });
 });
-```

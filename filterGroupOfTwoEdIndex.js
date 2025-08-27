@@ -1,6 +1,6 @@
 ```javascript
-// === Enhancer v2.2 — persistent + self-verifying ===
-const ENHANCER_VERSION = '2.2';
+// === Enhancer v2.4 — spinner-gated, persistent, self-verifying ===
+const ENHANCER_VERSION = '2.4';
 const valueClass = '.field-value-min';
 const propertyItemClass = '.table-row-min';
 
@@ -11,6 +11,7 @@ const propertyFilteredTypesArr = ['Mover','Either Starter or Mover']; // green h
 const removeWhenArr = ['Aged 60 and over','Sheltered','Aged 50 and over','Preferably aged 60 and over','Preferably aged 50 and over','Dispersed alarm'];
 const warningArr = ['Fourth','Multi storey flat'];
 const notTheBestLevelArr = ['Basement','Ground'];
+const SPINNER_SEL = 'span.u-Processing[role="alert"]';
 
 // --- Styles ---
 (function injectStyles(){
@@ -37,10 +38,16 @@ const notTheBestLevelArr = ['Basement','Ground'];
 
 $(function(){
   let enhancerEnabled = true;
-  let mo = null;
+  let moRows = null;
+  let moSpinner = null;
+
   let lastMutationAt = 0;
   let lastSignature = '';
-  let verifyTimer = null;
+  let spinnerEverSeen = false;       // must see spinner before first apply
+  let spinnerCurrentlyVisible = false;
+  let pendingApply = false;
+
+  const MUST_SEE_SPINNER_FIRST = true; // requirement
 
   // --- UI: toggle + status ---
   function ensureHeaderControls(){
@@ -53,12 +60,12 @@ $(function(){
           enhancerEnabled = !enhancerEnabled;
           $('#enhancer-toggle').attr('aria-pressed', String(enhancerEnabled)).text(`Enhancer: ${enhancerEnabled ? 'ON' : 'OFF'}`);
           updateStatus(enhancerEnabled ? 'busy' : 'off', '—');
-          if (enhancerEnabled){ attachObserver(); runCheck(true); }
-          else { detachObserver(); clearStyles(true); }
+          if (enhancerEnabled){ attachObservers(); gatedApply(true); }
+          else { detachObservers(); clearStyles(true); }
         });
     }
     if(!$('#enhancer-status').length){
-      $('<span id="enhancer-status" class="enhancer-status enhancer-status--busy" title="Enhancer status">↻ Updating…</span>').appendTo($h);
+      $('<span id="enhancer-status" class="enhancer-status enhancer-status--busy" title="Enhancer status">↻ Waiting…</span>').appendTo($h);
     }
   }
   function updateStatus(state, note){
@@ -71,14 +78,8 @@ $(function(){
   }
 
   // --- Helpers ---
-  const debounce = (fn, wait=150) => {
-    let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); };
-  };
-  const hash = (str) => {
-    let h = 2166136261>>>0;
-    for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
-    return (h>>>0).toString(16);
-  };
+  const debounce = (fn, wait=150) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), wait); }; };
+  const hash = (str) => { let h = 2166136261>>>0; for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h>>>0).toString(16); };
   const rowsSignature = () => {
     const chunks = [];
     $(propertyItemClass).each(function(){
@@ -86,6 +87,7 @@ $(function(){
     });
     return hash(chunks.join('|'));
   };
+  const isSpinnerVisible = () => $(SPINNER_SEL).length > 0;
 
   function clearStyles(showHidden){
     const $rows = $(propertyItemClass);
@@ -95,7 +97,7 @@ $(function(){
     $rows.css({backgroundColor:'', border:'', opacity:''}).find(valueClass).css({color:''});
   }
 
-  // --- Core: classify + style ---
+  // --- Core classify/apply ---
   function classifyRow($row){
     const texts = $row.find(valueClass).map(function(){ return $(this).text().trim(); }).get();
 
@@ -106,7 +108,7 @@ $(function(){
     const levelWarn        = texts.some(t => notTheBestLevelArr.includes(t));
     const otherWarnings    = texts.some(t => warningArr.includes(t));
 
-    const isStarterOnly    = texts.includes('Starter') && !texts.includes('Either Starter or Mover'); // strict "Starter"
+    const isStarterOnly    = texts.includes('Starter') && !texts.includes('Either Starter or Mover');
     const hasRemoveFlag    = texts.some(t => removeWhenArr.includes(t));
     const removeThis       = isStarterOnly || hasRemoveFlag;
 
@@ -119,7 +121,7 @@ $(function(){
         .attr('data-enhanced', ENHANCER_VERSION);
     $row.find(valueClass).css({color:''});
 
-    if (cls.removeThis) { $row.addClass('row--hidden'); return; }
+    if (cls.removeThis || !cls.roomTypeOk) { $row.addClass('row--hidden'); return; }
 
     if (cls.hasPropFiltered) {
       $row.addClass('row--green');
@@ -146,22 +148,12 @@ $(function(){
     const removeOnThisPage = $('.page-header').length && ['Basket','Bid Registration'].includes($('.page-header').text().trim());
     if (removeOnThisPage){ clearStyles(true); updateStatus('ok', '(skipped on this page)'); return; }
 
-    let total=0, hidden=0, green=0, worst=0, bad=0, warned=0;
     $rows.each(function(){
       const $row = $(this);
       const cls = classifyRow($row);
-      // do not delete rows permanently; hide via class to keep idempotent
       applyStyles($row, cls);
-
-      total++;
-      if (cls.removeThis || !cls.roomTypeOk) hidden++;
-      if (cls.hasPropFiltered) green++;
-      if (cls.isWorstPlace && !cls.hasPropFiltered) worst++;
-      if (cls.isQuiteBadPlace && !cls.hasPropFiltered) bad++;
-      if (cls.levelWarn || cls.otherWarnings) warned++;
     });
 
-    // signature after applying
     const sig = rowsSignature();
     if (force || sig !== lastSignature){
       lastSignature = sig;
@@ -169,26 +161,45 @@ $(function(){
     }
   }
 
-  // --- Verify stability & persistence ---
+  // --- Spinner-gated apply ---
   const STABLE_WINDOW_MS = 600;
-  const verifyNow = () => {
+  const debouncedRun = debounce(()=>{ runCheck(); }, 120);
+
+  function gatedApply(force=false){
     if(!enhancerEnabled) return;
-    // If mutations happened recently, postpone verification
-    if(Date.now() - lastMutationAt < STABLE_WINDOW_MS){
-      scheduleVerify();
+
+    spinnerCurrentlyVisible = isSpinnerVisible();
+    if (spinnerCurrentlyVisible){
+      pendingApply = true;
+      updateStatus('busy', '(processing…)');
+      return; // wait until spinner disappears
+    }
+
+    if (MUST_SEE_SPINNER_FIRST && !spinnerEverSeen){
+      // Do not apply until spinner has appeared at least once
+      updateStatus('busy', '(waiting for first spinner…)');
       return;
     }
-    // Check that our mark persists and classes remain consistent
+
+    // No spinner visible and requirement satisfied -> apply after short stability window
+    updateStatus('busy', '(applying…)');
+    setTimeout(()=>{ runCheck(force); }, STABLE_WINDOW_MS);
+  }
+
+  // --- Verify persistence ---
+  function verifyNow(){
+    if(!enhancerEnabled) return;
+    if (isSpinnerVisible()){ updateStatus('busy', '(processing…)'); return; }
+
     const $rows = $(propertyItemClass);
     let ok=0, expect=0;
     $rows.each(function(){
       const $row = $(this);
       const cls = classifyRow($row);
-      // rows we actually style (visible or hidden)
       expect++;
       const hasMark = $row.attr('data-enhanced') === ENHANCER_VERSION;
       const classesOk =
-        (cls.removeThis ? $row.hasClass('row--hidden') : true) &&
+        (cls.removeThis || !cls.roomTypeOk ? $row.hasClass('row--hidden') : true) &&
         (!cls.removeThis && cls.hasPropFiltered ? $row.hasClass('row--green') : true) &&
         (!cls.removeThis && cls.isWorstPlace && cls.hasPropFiltered ? $row.hasClass('row--red-border') : true);
       if (hasMark && classesOk) ok++;
@@ -199,39 +210,60 @@ $(function(){
       updateStatus('ok', `(v${ENHANCER_VERSION} • ${pct}% verified)`);
     } else {
       updateStatus('busy', `(reapplying; ${pct}% ok)`);
-      // Re-apply if something reverted
-      runCheck();
+      debouncedRun();
       scheduleVerify();
     }
-  };
-  const scheduleVerify = debounce(()=>{ verifyNow(); }, STABLE_WINDOW_MS);
-  const debouncedRun = debounce(()=>{ runCheck(); }, 120);
+  }
+  const scheduleVerify = debounce(()=>verifyNow(), STABLE_WINDOW_MS);
 
-  // --- Observer ---
-  function detachObserver(){ if(mo){ mo.disconnect(); mo=null; } }
-  function attachObserver(){
-    const container = document.querySelector('.table-container');
-    if(!container) return;
-    if(mo) detachObserver();
-    mo = new MutationObserver((mutations) => {
+  // --- Observers ---
+  function detachObservers(){
+    if(moRows){ moRows.disconnect(); moRows=null; }
+    if(moSpinner){ moSpinner.disconnect(); moSpinner=null; }
+  }
+  function attachObservers(){
+    // Rows/container observer
+    const container = document.querySelector('.table-container') || document.body;
+    if (moRows) moRows.disconnect();
+    moRows = new MutationObserver((mutations) => {
       lastMutationAt = Date.now();
-      updateStatus('busy');
-      // ignore attribute-only mutations to avoid loops
+      // only react to real content changes
       const relevant = mutations.some(m => m.type==='childList' || m.type==='characterData');
-      if (relevant) debouncedRun();
+      if (relevant) gatedApply();
     });
-    mo.observe(container, {childList:true,subtree:true,characterData:true});
+    moRows.observe(container, {childList:true,subtree:true,characterData:true});
+
+    // Spinner observer (must appear first; apply only after it disappears)
+    if (moSpinner) moSpinner.disconnect();
+    moSpinner = new MutationObserver(() => {
+      const visible = isSpinnerVisible();
+      if (visible){
+        spinnerCurrentlyVisible = true;
+        spinnerEverSeen = true;
+        updateStatus('busy', '(processing…)');
+      } else {
+        // spinner disappeared: if we were waiting, apply now
+        spinnerCurrentlyVisible = false;
+        if (pendingApply || spinnerEverSeen){
+          pendingApply = false;
+          gatedApply(true);
+        }
+      }
+    });
+    moSpinner.observe(document.body, {childList:true,subtree:true});
   }
 
   // --- Init ---
   ensureHeaderControls();
-  attachObserver();
+  attachObservers();
   updateStatus('busy', `(v${ENHANCER_VERSION})`);
-  runCheck(true);
 
-  // pagination hooks (if present)
+  // Initial gate: do nothing until spinner appears and disappears
+  if (!MUST_SEE_SPINNER_FIRST) gatedApply(true);
+
+  // Pagination hooks
   $('#body-primary-region').on('click', 'td.pagination div.pagination a', function () {
-    if (enhancerEnabled){ updateStatus('busy'); debouncedRun(); }
+    if (enhancerEnabled){ updateStatus('busy'); gatedApply(); }
   });
 });
 ```

@@ -1,30 +1,37 @@
-// === Enhancer v2.9 — spinner-gated, persistent ON/OFF, auto-reload on toggle, "Not detected" status, debug logs ===
-const ENHANCER_VERSION = '2.9';
-const DEBUG = true;
+// === Enhancer v3.0 — spinner-gated, ON/OFF persisted, auto-reload on toggle, 10s cutoff to "Not detected" ===
+/* Requirements addressed:
+   - Toggle persists to localStorage/cookie and reloads page on change.
+   - On reload: if OFF → do nothing; if ON → apply normally.
+   - Spinner gating: wait until the spinner APPEARS at least once, then until it DISAPPEARS, then apply.
+   - If spinner never appears within 10s → stop any loops, set status "Not detected", apply once.
+   - No "↻ Waiting…" message; no noisy "retrying..." logs; loops hard-stop at 10s without spinner.
+*/
 
-// Selectors
+const ENHANCER_VERSION = '3.0';
+const DEBUG = true; // set to false to silence all logs
+
+// ---------------- Selectors / Config ----------------
 const SPINNER_SEL = 'span.u-Processing[role="alert"]';
 const TABLE_CONTAINER_SEL = '.table-container';
 const ROW_SEL = '.table-row-min';
 const VAL_SEL = '.field-value-min';
 
-// Config
 const worstLocations = [...new Set(['Lochend','Inch','West Pilton','Granton','Muirhouse','Clermiston/Parkgrove','Greendykes','Royston Mains','Southhouse/Burdiehous','Restalrig','Milton','Dumbryden','Calders','Hyvots','Hailesland','Murrayburn','Saughton Mains','Prestonfield','Craigmillar','Niddrie','Moredun','Gilmerton','Gracemount','Bingham, Magdalene and The Christians','Stenhouse','Saughton','Broomhouse','Wester Hails','Wester Hailes','Westburn'])];
 const quiteBadLocations = ['Leith'];
 const roomTypeFilterArr = ['Two'];
-const propertyFilteredTypesArr = ['Mover','Either Starter or Mover']; // highlight green
+const propertyFilteredTypesArr = ['Mover','Either Starter or Mover']; // → green
 const removeWhenArr = ['Aged 60 and over','Sheltered','Aged 50 and over','Preferably aged 60 and over','Preferably aged 50 and over','Dispersed alarm'];
 const warningArr = ['Fourth','Multi storey flat'];
 const notTheBestLevelArr = ['Basement','Ground'];
 
-// Gating
-const REQUIRE_SPINNER_FIRST = true;     // wait until spinner appears at least once
-const POLL_MS = 250;                    // spinner poll interval
-const STABLE_MS = 400;                  // settle time after spinner hides
-const SPINNER_STUCK_MAX_MS = 10000;     // force apply if spinner stuck visible
-const NOT_DETECTED_TIMEOUT_MS = 10000;  // label "Not detected" and apply if spinner never appears
+// ---------------- Timing / gating ----------------
+const REQUIRE_SPINNER_FIRST = true;       // must see spinner at least once before first apply
+const POLL_MS = 250;                      // poll interval
+const STABLE_MS = 400;                    // settle time after spinner hides
+const SPINNER_STUCK_MAX_MS = 10000;       // if spinner visible > this → force apply
+const NOT_DETECTED_TIMEOUT_MS = 10000;    // if spinner never appears in this window → "Not detected" + apply
 
-// Storage helpers (localStorage with cookie fallback)
+// ---------------- Storage helpers ----------------
 const STORAGE_KEY = 'enhancerEnabled';
 function storageSet(k, v){
   try { localStorage.setItem(k, v); }
@@ -39,7 +46,7 @@ function storageGet(k, dflt=null){
   return m ? decodeURIComponent(m[1]) : dflt;
 }
 
-// Styles (one-time)
+// ---------------- Styles (one-time) ----------------
 (function injectStyles(){
   const css = `
     ${ROW_SEL}{transition:background-color .2s ease,border-color .2s ease,opacity .2s ease}
@@ -63,10 +70,10 @@ function storageGet(k, dflt=null){
   }
 })();
 
-// Debug
+// ---------------- Debug ----------------
 const log = (...a)=>{ if(DEBUG) console.log('[Enhancer v'+ENHANCER_VERSION+']', ...a); };
 
-// Spinner visibility (presence + visible)
+// ---------------- Spinner visibility ----------------
 function spinnerVisible(){
   const s = document.querySelectorAll(SPINNER_SEL);
   if(!s.length) return false;
@@ -78,7 +85,15 @@ function spinnerVisible(){
   return false;
 }
 
-// Header controls
+// ---------------- Header controls ----------------
+function setStatus(state, note){
+  const s = document.getElementById('enhancer-status'); if(!s) return;
+  s.className = 'enhancer-status';
+  if(state==='ok'){ s.classList.add('enhancer-status--ok'); s.textContent='✓ Stabilized '+(note||''); }
+  else if(state==='busy'){ s.classList.add('enhancer-status--busy'); s.textContent='↻ Updating… '+(note||''); }
+  else if(state==='notdetected'){ s.classList.add('enhancer-status--notdetected'); s.textContent='Not detected '+(note||''); }
+  else { s.classList.add('enhancer-status--off'); s.textContent='⏻ Off '+(note||''); }
+}
 function ensureHeaderControls(){
   const h = document.querySelector('h1.page-header');
   if(!h) return;
@@ -92,31 +107,24 @@ function ensureHeaderControls(){
   btn.setAttribute('aria-pressed', String(enhancer.enabled));
   btn.textContent = 'Enhancer: ' + (enhancer.enabled ? 'ON' : 'OFF');
   btn.onclick = ()=>{
-    const newVal = !enhancer.enabled;
-    storageSet(STORAGE_KEY, newVal ? '1':'0');
-    log('Toggle ->', newVal, '(persisted; reloading)');
-    location.reload(); // reload on change
+    const newVal = !enhancer.enabled;                  // true/false
+    storageSet(STORAGE_KEY, newVal ? '1':'0');         // persist as '1'/'0'
+    log('Toggle ->', newVal, '(saved → reload)');
+    location.reload();                                  // hard reload after saving
   };
 
-  // Status
+  // Status (no "Waiting…" text is used anywhere)
   let s = document.getElementById('enhancer-status');
   if(!s){
     s = document.createElement('span');
     s.id='enhancer-status';
     h.appendChild(s);
   }
-  setStatus(enhancer.enabled ? 'busy' : 'off', enhancer.enabled ? '(v'+ENHANCER_VERSION+')' : '');
-}
-function setStatus(state, note){
-  const s = document.getElementById('enhancer-status'); if(!s) return;
-  s.className = 'enhancer-status'; // reset
-  if(state==='ok'){ s.classList.add('enhancer-status--ok'); s.textContent='✓ Stabilized '+(note||''); }
-  else if(state==='busy'){ s.classList.add('enhancer-status--busy'); s.textContent='↻ Updating… '+(note||''); }
-  else if(state==='notdetected'){ s.classList.add('enhancer-status--notdetected'); s.textContent='Not detected '+(note||''); }
-  else { s.classList.add('enhancer-status--off'); s.textContent='⏻ Off '+(note||''); }
+  if (enhancer.enabled) setStatus('busy', `(v${ENHANCER_VERSION})`);
+  else setStatus('off', `(v${ENHANCER_VERSION})`);
 }
 
-// Classification + styling
+// ---------------- Classify + Apply ----------------
 function classifyRow(row){
   const texts = Array.from(row.querySelectorAll(VAL_SEL)).map(n=>n.textContent.trim());
   const roomTypeOk       = texts.some(t => roomTypeFilterArr.includes(t));
@@ -143,134 +151,129 @@ function applyStyles(row, c){
   if (c.levelWarn || c.otherWarnings) row.classList.add('row--warn');
   row.setAttribute('data-enhanced', ENHANCER_VERSION);
 }
-
-// Core apply
 function applyEnhancements(source){
   const container = document.querySelector(TABLE_CONTAINER_SEL);
   const rows = document.querySelectorAll(ROW_SEL);
   if (!container || !rows.length){ log('applyEnhancements: nothing to do', {hasContainer:!!container, rows:rows.length}); return; }
   log('applyEnhancements from', source, 'rows =', rows.length);
-  let total=0, hidden=0, green=0, worst=0, bad=0, warned=0;
-  rows.forEach(row=>{
-    const c = classifyRow(row);
-    applyStyles(row, c);
-    total++;
-    if (c.removeThis || !c.roomTypeOk) hidden++;
-    if (c.hasPropFiltered) green++;
-    if (c.isWorstPlace && !c.hasPropFiltered) worst++;
-    if (c.isQuiteBadPlace && !c.hasPropFiltered) bad++;
-    if (c.levelWarn || c.otherWarnings) warned++;
-  });
-  log('applied stats:', {total, hidden, green, worst, bad, warned});
+  rows.forEach(row=> applyStyles(row, classifyRow(row)) );
   setStatus('ok', `(v${ENHANCER_VERSION})`);
 }
 
-// Spinner gate (single polling loop; no mutation loops)
+// ---------------- Spinner gate (single interval; 10s cutoff) ----------------
 const enhancer = {
   enabled: (storageGet(STORAGE_KEY, null) === null ? true : storageGet(STORAGE_KEY) === '1'),
-  seenSpinnerOnce: false,
   pollId: null,
-  stuckTimerId: null,
-  notDetectedTimerId: null,
+  stuckId: null,
+  cutoffId: null,
+  seenSpinnerOnce: false,
   applying: false
 };
 
-function stopPolling(){
+function stopAllTimers(){
   if (enhancer.pollId){ clearInterval(enhancer.pollId); enhancer.pollId = null; }
-  if (enhancer.stuckTimerId){ clearTimeout(enhancer.stuckTimerId); enhancer.stuckTimerId = null; }
-  if (enhancer.notDetectedTimerId){ clearTimeout(enhancer.notDetectedTimerId); enhancer.notDetectedTimerId = null; }
+  if (enhancer.stuckId){ clearTimeout(enhancer.stuckId); enhancer.stuckId = null; }
+  if (enhancer.cutoffId){ clearTimeout(enhancer.cutoffId); enhancer.cutoffId = null; }
 }
 
-function watchSpinner(trigger){
+function safeApply(reason){
+  if (!enhancer.enabled) return;
+  if (enhancer.applying) return;
+  if (spinnerVisible()) return; // only apply when spinner is hidden/removed
+  enhancer.applying = true;
+  stopAllTimers();
+  try { applyEnhancements(reason); }
+  finally {
+    enhancer.applying = false;
+    // re-arm for future content loads (pagination, etc.)
+    setTimeout(()=>startGate('post-apply'), 0);
+  }
+}
+
+function startGate(trigger){
   if (!enhancer.enabled) return;
 
-  stopPolling();
+  stopAllTimers();
 
+  const startTs = Date.now();
   const container = document.querySelector(TABLE_CONTAINER_SEL);
-  if (!container){ log('watchSpinner: no table container yet, retrying in 300ms'); setTimeout(()=>watchSpinner('container-wait'), 300); return; }
 
-  log('watchSpinner start (trigger:', trigger, ') REQUIRE_SPINNER_FIRST =', REQUIRE_SPINNER_FIRST);
-  setStatus('busy','(v'+ENHANCER_VERSION+')');
-
-  // "Not detected" label + fallback apply if spinner never appears in time
-  if (REQUIRE_SPINNER_FIRST && !enhancer.seenSpinnerOnce){
-    enhancer.notDetectedTimerId = setTimeout(()=>{
-      if (!enhancer.seenSpinnerOnce && enhancer.enabled){
-        log('Spinner not detected within', NOT_DETECTED_TIMEOUT_MS,'ms -> label & apply');
-        setStatus('notdetected', '(v'+ENHANCER_VERSION+')');
-        enhancer.seenSpinnerOnce = true;   // allow apply path
-        safeApply('not-detected');
-      }
-    }, NOT_DETECTED_TIMEOUT_MS);
-  }
-
+  // If container is missing, we still honor the 10s cutoff without spamming logs.
   let lastVisible = spinnerVisible();
+
+  // 10s overall cutoff if spinner never appears
+  enhancer.cutoffId = setTimeout(()=>{
+    if (!enhancer.seenSpinnerOnce && enhancer.enabled){
+      log('Spinner not detected within 10s → Not detected + apply');
+      setStatus('notdetected', `(v${ENHANCER_VERSION})`);
+      enhancer.seenSpinnerOnce = true; // allow path
+      safeApply('not-detected');
+    }
+  }, NOT_DETECTED_TIMEOUT_MS);
+
+  // If spinner visible at start, arm stuck safety (10s)
   if (lastVisible){
     enhancer.seenSpinnerOnce = true;
-    log('spinner visible at start; arming stuck-safety');
-    enhancer.stuckTimerId = setTimeout(()=>{
+    enhancer.stuckId = setTimeout(()=>{
       if (spinnerVisible()){
-        log('spinner stuck >', SPINNER_STUCK_MAX_MS,'ms -> force apply');
+        log('Spinner stuck >10s → force apply');
         safeApply('spinner-stuck');
       }
     }, SPINNER_STUCK_MAX_MS);
   }
 
+  // Single polling loop (no console spam, no "retrying..." logs)
   enhancer.pollId = setInterval(()=>{
+    // Stop if cutoff time exceeded and already handled
+    if (Date.now() - startTs > NOT_DETECTED_TIMEOUT_MS + 1000){
+      stopAllTimers();
+      return;
+    }
+
+    // Require table container present before doing anything else; respect 10s cutoff
+    const hasContainer = !!document.querySelector(TABLE_CONTAINER_SEL);
+    if (!hasContainer) return; // silently wait; cutoff timer handles Not detected
+
     const vis = spinnerVisible();
     if (vis !== lastVisible){
       lastVisible = vis;
       if (vis){
         enhancer.seenSpinnerOnce = true;
-        setStatus('busy','(processing…)');
-        log('spinner appeared');
-        if (enhancer.stuckTimerId) clearTimeout(enhancer.stuckTimerId);
-        enhancer.stuckTimerId = setTimeout(()=>{
+        // re-arm stuck safety on each appearance
+        if (enhancer.stuckId) clearTimeout(enhancer.stuckId);
+        enhancer.stuckId = setTimeout(()=>{
           if (spinnerVisible()){
-            log('spinner stuck >', SPINNER_STUCK_MAX_MS,'ms -> force apply');
+            log('Spinner stuck >10s → force apply');
             safeApply('spinner-stuck');
           }
         }, SPINNER_STUCK_MAX_MS);
       } else {
-        // spinner disappeared -> apply after short settle
-        log('spinner disappeared; applying after', STABLE_MS,'ms');
+        // spinner disappeared → apply after small settle window
         setTimeout(()=> safeApply('spinner-hidden'), STABLE_MS);
       }
     }
   }, POLL_MS);
 }
 
-function safeApply(reason){
-  if (!enhancer.enabled) return;
-  if (enhancer.applying) { log('safeApply skipped; already applying'); return; }
-  if (spinnerVisible()){ log('safeApply aborted; spinner visible'); return; }
-
-  enhancer.applying = true;
-  stopPolling();
-  try {
-    applyEnhancements(reason);
-  } finally {
-    enhancer.applying = false;
-    // re-arm for future updates (e.g., pagination)
-    setTimeout(()=>watchSpinner('post-apply'), 0);
-  }
-}
-
-// Hooks
-$(function(){
+// ---------------- Init + hooks ----------------
+(function init(){
+  // Build header UI and reflect persisted state
   ensureHeaderControls();
 
-  if (enhancer.enabled){
-    watchSpinner('init');
-    // Pagination -> re-run spinner gate
-    $('#body-primary-region').on('click', 'td.pagination div.pagination a', function () {
-      if (!enhancer.enabled) return;
-      log('pagination clicked -> re-gate');
-      setStatus('busy','(v'+ENHANCER_VERSION+')');
-      watchSpinner('pagination');
-    });
-  } else {
-    setStatus('off', '(v'+ENHANCER_VERSION+')');
-    log('Enhancer disabled via storage; idle.');
+  if (!enhancer.enabled){
+    log('Enhancer OFF (persisted). Idle.');
+    return; // do not apply, do not start gate
   }
-});
+
+  log('Enhancer ON. Starting gate.');
+  startGate('init');
+
+  // Pagination hook (jQuery optional)
+  if (window.jQuery){
+    jQuery('#body-primary-region').on('click', 'td.pagination div.pagination a', function () {
+      if (!enhancer.enabled) return;
+      setStatus('busy', `(v${ENHANCER_VERSION})`);
+      startGate('pagination');
+    });
+  }
+})();
